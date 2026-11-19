@@ -1,0 +1,8 @@
+{
+  "name": "Confesiones de Emprendedores",
+  "description": "El purgatorio anónimo de founders, vendedores B2B y operadores quemados. Confiesa pecados emprendedores, reacciona sin filtros y visita El Cementerio de startups.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

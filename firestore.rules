@@ -1,0 +1,197 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidCategory(category) {
+      return category in [
+        'Clientes',
+        'Pagos y precios',
+        'Equipo y socios',
+        'Ventas',
+        'Día a día'
+      ];
+    }
+
+    function isValidBusinessType(businessType) {
+      return businessType in [
+        'Tienda / Comercio',
+        'Freelance / Servicios',
+        'Agencia / Marketing',
+        'Software / Tecnología',
+        'Restaurante / Cafetería',
+        'Clínica / Estética',
+        'Otro negocio'
+      ];
+    }
+
+    function isValidCount(n, maxVal) {
+      return n is int && n >= 0 && n <= maxVal;
+    }
+
+    function isValidReactionCounts(rc) {
+      return rc is map
+        && rc.keys().hasAll(['fire', 'skull', 'clown', 'hug', 'money'])
+        && rc.keys().hasOnly(['fire', 'skull', 'clown', 'hug', 'money'])
+        && isValidCount(rc.fire, 1000000)
+        && isValidCount(rc.skull, 1000000)
+        && isValidCount(rc.clown, 1000000)
+        && isValidCount(rc.hug, 1000000)
+        && isValidCount(rc.money, 1000000);
+    }
+
+    function isValidInitialReactionCounts(rc) {
+      return isValidReactionCounts(rc)
+        && rc.fire <= 1000
+        && rc.skull <= 1000
+        && rc.clown <= 1000
+        && rc.hug <= 1000
+        && rc.money <= 1000;
+    }
+
+    function isValidConfession(data) {
+      return data.keys().hasAll(['category', 'businessType', 'body', 'reactionCounts', 'commentCount', 'createdAt'])
+        && data.keys().hasOnly(['category', 'businessType', 'body', 'reactionCounts', 'commentCount', 'createdAt'])
+        && isValidCategory(data.category)
+        && isValidBusinessType(data.businessType)
+        && data.body is string
+        && data.body.size() >= 1
+        && data.body.size() <= 600
+        && isValidReactionCounts(data.reactionCounts)
+        && isValidCount(data.commentCount, 100000)
+        && data.createdAt is timestamp;
+    }
+
+    function isBoundedDelta(nextVal, prevVal) {
+      return nextVal >= 0 && (nextVal == prevVal || nextVal == prevVal + 1 || nextVal == prevVal - 1);
+    }
+
+    function isReactionUpdate() {
+      return incoming().diff(existing()).affectedKeys().hasOnly(['reactionCounts'])
+        && isBoundedDelta(incoming().reactionCounts.fire, existing().reactionCounts.fire)
+        && isBoundedDelta(incoming().reactionCounts.skull, existing().reactionCounts.skull)
+        && isBoundedDelta(incoming().reactionCounts.clown, existing().reactionCounts.clown)
+        && isBoundedDelta(incoming().reactionCounts.hug, existing().reactionCounts.hug)
+        && isBoundedDelta(incoming().reactionCounts.money, existing().reactionCounts.money);
+    }
+
+    function isCommentCountIncrement() {
+      return incoming().diff(existing()).affectedKeys().hasOnly(['commentCount'])
+        && incoming().commentCount == existing().commentCount + 1;
+    }
+
+    function isValidHexColor(c) {
+      return c is string && c.size() >= 4 && c.size() <= 16 && c.matches('^#[0-9a-fA-F]{3,8}$');
+    }
+
+    function isValidAvatar(avatar) {
+      return avatar is map
+        && avatar.keys().hasAll(['seed', 'bgColor', 'primaryColor', 'secondaryColor', 'accentColor', 'pattern', 'rotation', 'shiftX', 'shiftY'])
+        && avatar.keys().hasOnly(['seed', 'bgColor', 'primaryColor', 'secondaryColor', 'accentColor', 'pattern', 'rotation', 'shiftX', 'shiftY'])
+        && avatar.seed is string && avatar.seed.size() >= 1 && avatar.seed.size() <= 128
+        && isValidHexColor(avatar.bgColor)
+        && isValidHexColor(avatar.primaryColor)
+        && isValidHexColor(avatar.secondaryColor)
+        && isValidHexColor(avatar.accentColor)
+        && avatar.pattern in ['bauhaus', 'rings', 'prism', 'split', 'orbit']
+        && avatar.rotation is number && avatar.rotation >= 0 && avatar.rotation <= 360
+        && avatar.shiftX is number && avatar.shiftX >= -20 && avatar.shiftX <= 20
+        && avatar.shiftY is number && avatar.shiftY >= -20 && avatar.shiftY <= 20;
+    }
+
+    function isValidComment(data, confessionId) {
+      return data.keys().hasAll(['confessionId', 'text', 'avatar', 'createdAt'])
+        && data.keys().hasOnly(['confessionId', 'text', 'avatar', 'createdAt'])
+        && data.confessionId == confessionId
+        && isValidId(data.confessionId)
+        && data.text is string
+        && data.text.size() >= 1
+        && data.text.size() <= 280
+        && isValidAvatar(data.avatar)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidDeleteAuth(data) {
+      return data.keys().hasAll(['secret', 'armed'])
+        && data.keys().hasOnly(['secret', 'armed'])
+        && data.secret is string
+        && data.secret.size() >= 24
+        && data.secret.size() <= 128
+        && data.armed is bool;
+    }
+
+    function isDeleteArmed(confessionId) {
+      return exists(/databases/$(database)/documents/confessions/$(confessionId)/private/deleteAuth)
+        && get(/databases/$(database)/documents/confessions/$(confessionId)/private/deleteAuth).data.armed == true;
+    }
+
+    match /confessions/{confessionId} {
+      allow get: if isValidId(confessionId);
+      allow list: if request.query.limit is int && request.query.limit > 0 && request.query.limit <= 100;
+      allow create: if isValidId(confessionId)
+        && isValidConfession(incoming())
+        && isValidInitialReactionCounts(incoming().reactionCounts)
+        && incoming().commentCount == 0
+        && incoming().createdAt == request.time;
+      allow update: if isValidId(confessionId)
+        && isValidConfession(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().category == existing().category
+        && incoming().businessType == existing().businessType
+        && incoming().body == existing().body
+        && (isReactionUpdate() || isCommentCountIncrement());
+      allow delete: if isValidId(confessionId)
+        && isDeleteArmed(confessionId);
+
+      match /comments/{commentId} {
+        allow create: if isValidId(confessionId)
+          && isValidId(commentId)
+          && isValidComment(incoming(), confessionId)
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/confessions/$(confessionId))
+          && getAfter(/databases/$(database)/documents/confessions/$(confessionId)).data.commentCount == get(/databases/$(database)/documents/confessions/$(confessionId)).data.commentCount + 1;
+        allow update: if false;
+        allow delete: if isValidId(confessionId)
+          && isValidId(commentId)
+          && isDeleteArmed(confessionId);
+      }
+
+      match /private/deleteAuth {
+        allow read: if false;
+        allow create: if isValidId(confessionId)
+          && isValidDeleteAuth(incoming())
+          && incoming().armed == false
+          && !exists(/databases/$(database)/documents/confessions/$(confessionId))
+          && existsAfter(/databases/$(database)/documents/confessions/$(confessionId));
+        allow update: if isValidId(confessionId)
+          && isValidDeleteAuth(incoming())
+          && incoming().armed == true
+          && incoming().secret == existing().secret
+          && exists(/databases/$(database)/documents/confessions/$(confessionId));
+        allow delete: if isValidId(confessionId)
+          && existing().armed == true;
+      }
+    }
+
+    match /{path=**}/comments/{commentId} {
+      allow get: if isValidId(commentId);
+      allow list: if request.query.limit is int && request.query.limit > 0 && request.query.limit <= 500;
+    }
+  }
+}

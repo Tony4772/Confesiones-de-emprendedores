@@ -1,0 +1,138 @@
+{
+  "entities": {
+    "Confession": {
+      "title": "Confession",
+      "description": "An anonymous business or client story posted to the public confession wall.",
+      "type": "object",
+      "properties": {
+        "category": {
+          "type": "string",
+          "description": "Topic category of the confession.",
+          "enum": [
+            "Clientes",
+            "Pagos y precios",
+            "Equipo y socios",
+            "Ventas",
+            "Día a día"
+          ]
+        },
+        "businessType": {
+          "type": "string",
+          "description": "Business sector of the anonymous author.",
+          "enum": [
+            "Tienda / Comercio",
+            "Freelance / Servicios",
+            "Agencia / Marketing",
+            "Software / Tecnología",
+            "Restaurante / Cafetería",
+            "Clínica / Estética",
+            "Otro negocio"
+          ]
+        },
+        "body": {
+          "type": "string",
+          "description": "Main anonymous story text.",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "reactionCounts": {
+          "type": "object",
+          "description": "Aggregated emoji reaction counters (fire, skull, clown, hug, money)."
+        },
+        "commentCount": {
+          "type": "integer",
+          "description": "Total number of anonymous comments on this confession."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the confession was created."
+        }
+      },
+      "required": [
+        "category",
+        "businessType",
+        "body",
+        "reactionCounts",
+        "commentCount",
+        "createdAt"
+      ]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "An anonymous comment on a confession with a generated abstract geometric avatar.",
+      "type": "object",
+      "properties": {
+        "confessionId": {
+          "type": "string",
+          "description": "Parent confession document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "text": {
+          "type": "string",
+          "description": "Anonymous comment body.",
+          "minLength": 1,
+          "maxLength": 280
+        },
+        "avatar": {
+          "type": "object",
+          "description": "Generated abstract SVG avatar parameters."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the comment was created."
+        }
+      },
+      "required": [
+        "confessionId",
+        "text",
+        "avatar",
+        "createdAt"
+      ]
+    },
+    "DeleteAuth": {
+      "title": "DeleteAuth",
+      "description": "Unreadable private deletion secret enabling anonymous authors to delete their own confession.",
+      "type": "object",
+      "properties": {
+        "secret": {
+          "type": "string",
+          "description": "High-entropy author secret generated on confession creation.",
+          "minLength": 24,
+          "maxLength": 128
+        },
+        "armed": {
+          "type": "boolean",
+          "description": "Two-step confirmation flag armed only when matching secret is presented."
+        }
+      },
+      "required": [
+        "secret",
+        "armed"
+      ]
+    }
+  },
+  "firestore": {
+    "/confessions/{confessionId}": {
+      "schema": {
+        "$ref": "#/entities/Confession"
+      },
+      "description": "Public collection of anonymous entrepreneur confessions."
+    },
+    "/confessions/{confessionId}/comments/{commentId}": {
+      "schema": {
+        "$ref": "#/entities/Comment"
+      },
+      "description": "Subcollection of anonymous comments belonging to a confession."
+    },
+    "/confessions/{confessionId}/private/deleteAuth": {
+      "schema": {
+        "$ref": "#/entities/DeleteAuth"
+      },
+      "description": "Non-readable private token document used solely to authorize anonymous self-deletion."
+    }
+  }
+}
